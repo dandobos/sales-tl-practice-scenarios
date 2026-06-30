@@ -50,7 +50,6 @@
     app.innerHTML = `
       <section class="intro-grid">
         <div class="intro-copy">
-          <p class="eyebrow">Before you begin</p>
           <h2>Give feedback on four short scenarios</h2>
           <p class="lede">Your responses are treated as a work sample for the Sales Team Leader role. Submit only when you are ready; responses cannot be edited afterward.</p>
           ${configWarning()}
