@@ -2,6 +2,8 @@
 
 Static GitHub Pages app for Sales TL applicants to submit text responses to four scenario videos.
 
+Live site: https://dandobos.github.io/sales-tl-practice-scenarios/
+
 ## Current Setup
 
 - `config.js` points at the Supabase project for response storage.
