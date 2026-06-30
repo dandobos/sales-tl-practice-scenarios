@@ -29,8 +29,14 @@
   init();
 
   function init() {
+    const adminToken = getParam("admin");
     const reviewToken = getParam("review");
     const receiptToken = getParam("receipt");
+
+    if (adminToken) {
+      renderAdminDashboard(adminToken);
+      return;
+    }
 
     if (reviewToken) {
       renderReview(reviewToken);
@@ -276,19 +282,9 @@
 
     const urls = buildUrls(row.applicant_token, row.review_token);
 
-    const notifyResult = await supabaseClient.functions.invoke(config.notifyFunctionName, {
-      body: {
-        submission_id: row.submission_id,
-        review_token: row.review_token,
-        applicant_url: urls.applicantUrl,
-        review_url: urls.reviewUrl,
-      },
-    });
-
     return {
       ...urls,
       submittedAt: row.created_at,
-      notifyError: notifyResult.error ? notifyResult.error.message : "",
     };
   }
 
@@ -301,14 +297,16 @@
       candidate_email: state.applicant.email,
       created_at: new Date().toISOString(),
       responses,
+      applicant_token: applicantToken,
+      review_token: reviewToken,
     };
     localStorage.setItem(`demo-receipt-${applicantToken}`, JSON.stringify(demoSubmission));
     localStorage.setItem(`demo-review-${reviewToken}`, JSON.stringify(demoSubmission));
+    saveDemoAdminSubmission(demoSubmission);
     await wait(350);
     return {
       ...urls,
       submittedAt: demoSubmission.created_at,
-      notifyError: "Demo mode: Supabase anon key has not been added yet, so no email was sent.",
     };
   }
 
@@ -320,11 +318,7 @@
           <p class="eyebrow">Submitted</p>
           <h2>Thank you. Please save this URL.</h2>
           <p class="lede">We will discuss this further during the hiring process.</p>
-          ${
-            result.notifyError
-              ? `<div class="config-warning">${escapeHtml(result.notifyError)}</div>`
-              : `<p class="success-note">Dan has been notified at ${escapeHtml(config.reviewerEmail)}.</p>`
-          }
+          <p class="success-note">Your response has been saved.</p>
         </div>
         <div class="review-surface">
           <div class="url-box">
@@ -343,6 +337,30 @@
       await navigator.clipboard.writeText(result.applicantUrl);
       document.querySelector("#copy-url").textContent = "Copied";
     });
+  }
+
+  async function renderAdminDashboard(token) {
+    setStatus("Private dashboard");
+    app.innerHTML = `
+      <section class="admin-grid">
+        <div class="intro-copy">
+          <p class="eyebrow">Private dashboard</p>
+          <h2>Sales TL scenario responses</h2>
+          <p class="lede">Bookmark this page. New submissions appear here after refresh.</p>
+        </div>
+        <div class="panel form-panel">
+          <p class="hint">Loading submissions...</p>
+        </div>
+      </section>
+    `;
+
+    try {
+      const submissions = isConfigured ? await fetchAdminSubmissions(token) : fetchDemoAdminSubmissions();
+      app.innerHTML = adminDashboardMarkup(submissions, token);
+      wireAdminDashboard(token);
+    } catch (error) {
+      renderError("Dashboard unavailable", adminErrorMessage(error), "Dashboard issue");
+    }
   }
 
   async function renderReceipt(token) {
@@ -387,6 +405,110 @@
     });
     if (error) throw error;
     return Array.isArray(data) ? data[0] : data;
+  }
+
+  async function fetchAdminSubmissions(token) {
+    const { data, error } = await supabaseClient.rpc("get_sales_tl_submissions_for_admin", {
+      p_admin_token: token,
+      p_limit: 100,
+    });
+    if (error) throw error;
+    return Array.isArray(data) ? data : [];
+  }
+
+  function adminDashboardMarkup(submissions, token) {
+    const sortedSubmissions = submissions
+      .slice()
+      .sort((left, right) => new Date(right.created_at || 0) - new Date(left.created_at || 0));
+    const latestSubmission = sortedSubmissions[0];
+
+    return `
+      <section class="admin-grid">
+        <aside class="admin-sidebar">
+          <p class="eyebrow">Private dashboard</p>
+          <h2>Sales TL scenario responses</h2>
+          <p class="lede">Bookmark this page. New submissions appear here after refresh.</p>
+          <div class="actions">
+            <button class="secondary" type="button" id="refresh-dashboard">Refresh</button>
+          </div>
+        </aside>
+        <div class="dashboard-stack">
+          <div class="dashboard-summary">
+            <div>
+              <span class="summary-number">${sortedSubmissions.length}</span>
+              <span class="summary-label">${sortedSubmissions.length === 1 ? "submission" : "submissions"}</span>
+            </div>
+            <div>
+              <span class="summary-label">Latest</span>
+              <span class="summary-detail">${
+                latestSubmission ? escapeHtml(formatDate(latestSubmission.created_at)) : "No submissions yet"
+              }</span>
+            </div>
+          </div>
+          ${
+            sortedSubmissions.length
+              ? `<div class="submission-list">${sortedSubmissions.map(adminSubmissionCardMarkup).join("")}</div>`
+              : emptyDashboardMarkup()
+          }
+        </div>
+      </section>
+    `;
+  }
+
+  function adminSubmissionCardMarkup(submission) {
+    const urls = buildUrls(submission.applicant_token, submission.review_token);
+    const responses = normalizeResponses(submission.responses);
+    const answeredCount = responses.filter((response) =>
+      richTextToPlainText(response.answerHtml || plainTextToHtml(response.answer || "")).trim()
+    ).length;
+
+    return `
+      <article class="submission-card">
+        <div class="submission-top">
+          <div>
+            <h3>${escapeHtml(submission.candidate_name || "Applicant")}</h3>
+            <p class="submission-email">${escapeHtml(submission.candidate_email || "")}</p>
+          </div>
+          <span class="submission-date">${escapeHtml(formatDate(submission.created_at))}</span>
+        </div>
+        <div class="submission-meta">
+          <span>${answeredCount} of ${scenarios.length} responses</span>
+          ${
+            submission.starhire_candidate_id
+              ? `<span>StarHire ID ${escapeHtml(submission.starhire_candidate_id)}</span>`
+              : ""
+          }
+        </div>
+        <div class="submission-actions">
+          <a class="primary" href="${escapeAttr(urls.reviewUrl)}" target="_blank" rel="noopener">Open review</a>
+          <a class="secondary" href="${escapeAttr(urls.applicantUrl)}" target="_blank" rel="noopener">Applicant URL</a>
+          <button class="text-button copy-link" type="button" data-copy-url="${escapeAttr(urls.reviewUrl)}">Copy review link</button>
+        </div>
+      </article>
+    `;
+  }
+
+  function emptyDashboardMarkup() {
+    return `
+      <div class="empty-dashboard">
+        <h3>No submissions yet</h3>
+        <p class="hint">When an applicant submits their responses, they will appear here with review and applicant links.</p>
+      </div>
+    `;
+  }
+
+  function wireAdminDashboard(token) {
+    const refreshButton = document.querySelector("#refresh-dashboard");
+    if (refreshButton) {
+      refreshButton.addEventListener("click", () => renderAdminDashboard(token));
+    }
+
+    document.querySelectorAll("[data-copy-url]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        await navigator.clipboard.writeText(button.dataset.copyUrl);
+        button.textContent = "Copied";
+      });
+    });
   }
 
   function receiptMarkup(submission, includeDanResponses) {
@@ -436,8 +558,8 @@
     `;
   }
 
-  function renderError(title, detail) {
-    setStatus("Not found");
+  function renderError(title, detail, statusText = "Not found") {
+    setStatus(statusText);
     app.innerHTML = `
       <section class="intro-grid">
         <div class="intro-copy">
@@ -452,6 +574,36 @@
   function normalizeResponses(rawResponses) {
     const parsed = typeof rawResponses === "string" ? JSON.parse(rawResponses) : rawResponses || {};
     return parsed.answers || [];
+  }
+
+  function saveDemoAdminSubmission(submission) {
+    const submissions = fetchDemoAdminSubmissions();
+    localStorage.setItem(
+      "demo-admin-submissions",
+      JSON.stringify([
+        submission,
+        ...submissions.filter((item) => item.review_token !== submission.review_token),
+      ])
+    );
+  }
+
+  function fetchDemoAdminSubmissions() {
+    try {
+      return JSON.parse(localStorage.getItem("demo-admin-submissions") || "[]");
+    } catch {
+      return [];
+    }
+  }
+
+  function adminErrorMessage(error) {
+    const message = String(error && error.message ? error.message : error || "");
+    if (message.includes("get_sales_tl_submissions_for_admin") || message.includes("Could not find the function")) {
+      return "The private dashboard database function has not been applied in Supabase yet.";
+    }
+    if (message.toLowerCase().includes("invalid admin token")) {
+      return "This dashboard link is not recognised.";
+    }
+    return message || "Please refresh the page and try again.";
   }
 
   function getAnswerHtml(scenarioId) {

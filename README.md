@@ -2,24 +2,20 @@
 
 Static GitHub Pages app for Sales TL applicants to submit text responses to four scenario videos.
 
-Live site: https://dandobos.github.io/sales-tl-practice-scenarios/
+Target live site: https://emersoncoaching.github.io/sales-tl-practice-scenarios/
 
 ## Current Setup
 
 - `config.js` points at the Supabase project for response storage.
-- `supabase/schema.sql` has been applied in Supabase.
+- The base Supabase response-storage schema has been applied.
 - The four compressed scenario videos are included in `assets/videos/`.
+- Applicants submit text responses with light rich text formatting.
+- Dan reviews submissions from the private dashboard URL stored in `private/admin-dashboard.md`.
 
-## Remaining Email Setup
+## Private Dashboard Setup
 
-To email Dan when a new response arrives, deploy the Supabase Edge Function in `supabase/functions/notify-sales-tl-submission` and set these function secrets:
+Email notifications are intentionally not required. The dashboard uses an unguessable `?admin=` URL and a Supabase RPC function that compares the token to a SHA-256 hash.
 
-```sh
-RESEND_API_KEY="..."
-NOTIFY_FROM="Dan at Emerson Coaching <dan@emersoncoaching.com.au>"
-NOTIFY_TO="dan@emersoncoaching.com.au"
-REPLY_TO="dan@emersoncoaching.com.au"
-SUPABASE_SERVICE_ROLE_KEY="..."
-```
+To enable the dashboard in Supabase, run the latest `supabase/schema.sql` in the Supabase SQL editor.
 
-The applicant-facing app only needs the public anon key. The service role key stays in Supabase function secrets.
+The real admin token is not committed to GitHub. Keep `private/admin-dashboard.md` local.
