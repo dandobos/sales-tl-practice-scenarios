@@ -124,10 +124,25 @@
             <p class="eyebrow">Scenario ${index + 1}</p>
             <h2>${escapeHtml(scenario.title)}</h2>
             <p class="prompt">${escapeHtml(scenario.prompt)}</p>
-            <label for="answer">Your response</label>
-            <textarea id="answer" name="answer" spellcheck="true">${escapeHtml(
-              state.answers[scenario.id] || ""
-            )}</textarea>
+            <div class="field-label" id="answer-label">Your response</div>
+            <div class="rich-editor-shell">
+              <div class="rich-toolbar" role="toolbar" aria-label="Formatting tools">
+                <button class="tool-button" type="button" data-command="bold" aria-label="Bold" title="Bold"><strong>B</strong></button>
+                <button class="tool-button" type="button" data-command="italic" aria-label="Italic" title="Italic"><em>I</em></button>
+                <button class="tool-button" type="button" data-command="insertUnorderedList" aria-label="Bullet list" title="Bullet list"><span aria-hidden="true">&bull;</span></button>
+                <button class="tool-button" type="button" data-command="insertOrderedList" aria-label="Numbered list" title="Numbered list"><span aria-hidden="true">1.</span></button>
+              </div>
+              <div
+                class="rich-editor"
+                id="answer"
+                contenteditable="true"
+                role="textbox"
+                aria-labelledby="answer-label"
+                aria-multiline="true"
+                spellcheck="true"
+                data-placeholder="Write your feedback here..."
+              >${getAnswerHtml(scenario.id)}</div>
+            </div>
             <div class="actions">
               ${
                 index > 0
@@ -137,20 +152,18 @@
               <button class="primary" type="button" id="next-button">${
                 index === scenarios.length - 1 ? "Review answers" : "Next scenario"
               }</button>
-              <span class="counter" id="word-count">0 words</span>
             </div>
           </div>
         </article>
       </section>
     `;
 
-    const textarea = document.querySelector("#answer");
+    const editor = document.querySelector("#answer");
     const updateAnswer = () => {
-      state.answers[scenario.id] = textarea.value;
+      state.answers[scenario.id] = sanitizeRichHtml(editor.innerHTML);
       saveDraft();
-      document.querySelector("#word-count").textContent = `${countWords(textarea.value)} words`;
     };
-    textarea.addEventListener("input", updateAnswer);
+    wireRichEditor(editor, updateAnswer);
     updateAnswer();
 
     const back = document.querySelector("#back-button");
@@ -160,9 +173,9 @@
 
     document.querySelector("#next-button").addEventListener("click", () => {
       updateAnswer();
-      if (!state.answers[scenario.id].trim()) {
+      if (!richTextToPlainText(state.answers[scenario.id]).trim()) {
         showInlineError(document.querySelector(".scenario-body"), "Please write a response before continuing.");
-        textarea.focus();
+        editor.focus();
         return;
       }
       renderScenario(index + 1);
@@ -186,7 +199,7 @@
                 <section class="receipt-item">
                   <p class="eyebrow">Scenario ${index + 1}</p>
                   <h3>${escapeHtml(scenario.title)}</h3>
-                  <div class="answer-box">${escapeHtml(state.answers[scenario.id] || "")}</div>
+                  ${answerBoxMarkup("Your response", getAnswerHtml(scenario.id))}
                   <button class="text-button" type="button" data-edit="${index}">Edit this response</button>
                 </section>
               `
@@ -221,12 +234,16 @@
     try {
       const responses = {
         scenarioVersion: "2026-06-v1",
-        answers: scenarios.map((scenario) => ({
-          id: scenario.id,
-          title: scenario.title,
-          prompt: scenario.prompt,
-          answer: state.answers[scenario.id] || "",
-        })),
+        answers: scenarios.map((scenario) => {
+          const answerHtml = getAnswerHtml(scenario.id);
+          return {
+            id: scenario.id,
+            title: scenario.title,
+            prompt: scenario.prompt,
+            answer: richTextToPlainText(answerHtml),
+            answerHtml,
+          };
+        }),
       };
 
       const result = isConfigured
@@ -401,10 +418,13 @@
                     ${
                       includeDanResponses
                         ? `<div class="comparison">
-                            <div class="answer-box"><strong>Applicant response</strong>${escapeHtml(response.answer || "")}</div>
-                            <div class="answer-box"><strong>Dan response</strong>${escapeHtml(scenario.danResponse || "")}</div>
+                            ${answerBoxMarkup(
+                              "Applicant response",
+                              response.answerHtml || plainTextToHtml(response.answer || "")
+                            )}
+                            ${answerBoxMarkup("Dan response", plainTextToHtml(scenario.danResponse || ""))}
                           </div>`
-                        : `<div class="answer-box"><strong>Your response</strong>${escapeHtml(response.answer || "")}</div>`
+                        : answerBoxMarkup("Your response", response.answerHtml || plainTextToHtml(response.answer || ""))
                     }
                   </section>
                 `;
@@ -432,6 +452,134 @@
   function normalizeResponses(rawResponses) {
     const parsed = typeof rawResponses === "string" ? JSON.parse(rawResponses) : rawResponses || {};
     return parsed.answers || [];
+  }
+
+  function getAnswerHtml(scenarioId) {
+    const value = state.answers[scenarioId];
+
+    if (!value) return "";
+    if (typeof value === "object") {
+      return sanitizeRichHtml(value.html || plainTextToHtml(value.text || value.answer || ""));
+    }
+    if (looksLikeRichHtml(value)) return sanitizeRichHtml(value);
+    return plainTextToHtml(value);
+  }
+
+  function wireRichEditor(editor, onChange) {
+    const toolbar = editor.closest(".rich-editor-shell").querySelector(".rich-toolbar");
+
+    editor.addEventListener("input", () => {
+      onChange();
+      updateToolbarState(toolbar);
+    });
+    editor.addEventListener("keyup", () => updateToolbarState(toolbar));
+    editor.addEventListener("mouseup", () => updateToolbarState(toolbar));
+    editor.addEventListener("paste", (event) => {
+      event.preventDefault();
+      const pastedHtml = event.clipboardData.getData("text/html");
+      const pastedText = event.clipboardData.getData("text/plain");
+      const safeHtml = sanitizeRichHtml(pastedHtml || plainTextToHtml(pastedText));
+      document.execCommand("insertHTML", false, safeHtml);
+      onChange();
+      updateToolbarState(toolbar);
+    });
+
+    toolbar.querySelectorAll("[data-command]").forEach((button) => {
+      button.addEventListener("mousedown", (event) => event.preventDefault());
+      button.addEventListener("click", () => {
+        editor.focus();
+        document.execCommand(button.dataset.command, false, null);
+        onChange();
+        updateToolbarState(toolbar);
+      });
+    });
+  }
+
+  function updateToolbarState(toolbar) {
+    toolbar.querySelectorAll("[data-command]").forEach((button) => {
+      try {
+        button.classList.toggle("is-active", document.queryCommandState(button.dataset.command));
+      } catch {
+        button.classList.remove("is-active");
+      }
+    });
+  }
+
+  function answerBoxMarkup(label, html) {
+    return `
+      <div class="answer-box">
+        <strong class="answer-label">${escapeHtml(label)}</strong>
+        <div class="formatted-answer">${sanitizeRichHtml(html)}</div>
+      </div>
+    `;
+  }
+
+  function plainTextToHtml(text) {
+    const value = String(text || "").replace(/\r\n/g, "\n").trim();
+    if (!value) return "";
+    return value
+      .split("\n")
+      .map((line) => (line ? `<p>${escapeHtml(line)}</p>` : "<p><br></p>"))
+      .join("");
+  }
+
+  function richTextToPlainText(html) {
+    const container = document.createElement("div");
+    container.innerHTML = sanitizeRichHtml(html);
+    container.querySelectorAll("br").forEach((node) => node.replaceWith("\n"));
+    container.querySelectorAll("p, li").forEach((node) => node.append(document.createTextNode("\n")));
+    return container.textContent.replace(/\n{3,}/g, "\n\n").trim();
+  }
+
+  function sanitizeRichHtml(html) {
+    const template = document.createElement("template");
+    const output = document.createElement("div");
+    template.innerHTML = String(html || "");
+
+    template.content.childNodes.forEach((node) => appendCleanNode(output, node));
+    output.querySelectorAll("p").forEach((node) => {
+      if (!node.textContent.trim() && !node.querySelector("br")) node.remove();
+    });
+    return output.innerHTML.trim();
+  }
+
+  function appendCleanNode(parent, node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      parent.append(document.createTextNode(node.textContent));
+      return;
+    }
+
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+
+    const tag = node.tagName.toLowerCase();
+    if (tag === "script" || tag === "style") return;
+
+    const tagMap = {
+      b: "strong",
+      strong: "strong",
+      i: "em",
+      em: "em",
+      div: "p",
+      p: "p",
+      ul: "ul",
+      ol: "ol",
+      li: "li",
+      br: "br",
+    };
+    const cleanTag = tagMap[tag];
+
+    if (!cleanTag) {
+      node.childNodes.forEach((child) => appendCleanNode(parent, child));
+      return;
+    }
+
+    const element = document.createElement(cleanTag);
+    node.childNodes.forEach((child) => appendCleanNode(element, child));
+    parent.append(element);
+  }
+
+  function looksLikeRichHtml(value) {
+    return /<\/?(strong|em|b|i|ul|ol|li|p|div|br)\b/i.test(String(value || ""));
   }
 
   function buildUrls(applicantToken, reviewToken) {
@@ -488,11 +636,6 @@
 
   function isEmail(value) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-  }
-
-  function countWords(value) {
-    const words = value.trim().match(/\S+/g);
-    return words ? words.length : 0;
   }
 
   function formatDate(value) {

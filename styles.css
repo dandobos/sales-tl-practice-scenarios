@@ -41,7 +41,8 @@ body {
 
 button,
 input,
-textarea {
+textarea,
+.rich-editor {
   font: inherit;
 }
 
@@ -229,14 +230,20 @@ h3 {
   margin-bottom: 0;
 }
 
-label {
+label,
+.field-label {
   color: var(--ink);
   font-size: 0.92rem;
   font-weight: 800;
 }
 
+.field-label {
+  margin-bottom: 8px;
+}
+
 input,
-textarea {
+textarea,
+.rich-editor-shell {
   width: 100%;
   border: 1px solid #c9d8e4;
   border-radius: 6px;
@@ -259,6 +266,7 @@ textarea {
 
 input:focus,
 textarea:focus,
+.rich-editor:focus,
 button:focus-visible,
 a:focus-visible {
   outline: 3px solid color-mix(in srgb, var(--focus), transparent 62%);
@@ -324,6 +332,83 @@ a:focus-visible {
 
 .actions.start-actions {
   margin-top: 0;
+}
+
+.rich-editor-shell {
+  overflow: hidden;
+}
+
+.rich-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--paper), #ffffff 55%);
+}
+
+.tool-button {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 32px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--emerson-navy);
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 850;
+}
+
+.tool-button:hover,
+.tool-button.is-active {
+  border-color: color-mix(in srgb, var(--accent), var(--line) 35%);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.rich-editor {
+  width: 100%;
+  min-height: 220px;
+  padding: 14px;
+  background: transparent;
+  color: var(--ink);
+  line-height: 1.48;
+  outline: 0;
+  overflow: auto;
+}
+
+.rich-editor:empty::before {
+  content: attr(data-placeholder);
+  color: var(--muted);
+}
+
+.rich-editor p,
+.formatted-answer p {
+  margin: 0 0 0.7em;
+}
+
+.rich-editor p:last-child,
+.formatted-answer p:last-child,
+.rich-editor ul:last-child,
+.rich-editor ol:last-child,
+.formatted-answer ul:last-child,
+.formatted-answer ol:last-child {
+  margin-bottom: 0;
+}
+
+.rich-editor ul,
+.rich-editor ol,
+.formatted-answer ul,
+.formatted-answer ol {
+  margin: 0 0 0.75em;
+  padding-left: 1.35rem;
+}
+
+.rich-editor li + li,
+.formatted-answer li + li {
+  margin-top: 0.25em;
 }
 
 .hint,
@@ -421,13 +506,6 @@ video {
   line-height: 1.48;
 }
 
-.counter {
-  margin-left: auto;
-  color: var(--muted);
-  font-size: 0.9rem;
-  font-weight: 750;
-}
-
 .review-grid {
   grid-template-columns: minmax(260px, 0.74fr) minmax(0, 1.26fr);
 }
@@ -465,17 +543,24 @@ video {
   border-radius: var(--radius);
   background: var(--field);
   padding: 14px;
-  white-space: pre-wrap;
   line-height: 1.45;
 }
 
-.answer-box strong {
+.answer-box > .answer-label {
   display: block;
   margin-bottom: 8px;
   color: var(--accent-strong);
   font-size: 0.83rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+.formatted-answer {
+  white-space: normal;
+}
+
+.formatted-answer strong {
+  font-weight: 850;
 }
 
 .receipt-grid {
@@ -562,7 +647,8 @@ video {
     padding-top: 0;
   }
 
-  textarea {
+  textarea,
+  .rich-editor {
     min-height: 190px;
   }
 }
