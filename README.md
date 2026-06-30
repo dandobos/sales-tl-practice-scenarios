@@ -16,6 +16,6 @@ Target live site: https://emersoncoaching.github.io/sales-tl-practice-scenarios/
 
 Email notifications are intentionally not required. The dashboard uses an unguessable `?admin=` URL and a Supabase RPC function that compares the token to a SHA-256 hash.
 
-To enable the dashboard in Supabase, run the latest `supabase/schema.sql` in the Supabase SQL editor.
+To enable the dashboard in Supabase, run `supabase/admin-dashboard.sql` in the Supabase SQL editor.
 
 The real admin token is not committed to GitHub. Keep `private/admin-dashboard.md` local.
