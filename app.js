@@ -581,7 +581,6 @@
         <header class="submission-section-header">
           <div>
             <h3>${escapeHtml(meta.sectionTitle)}</h3>
-            <p>${escapeHtml(meta.sectionHint)}</p>
           </div>
           <span class="section-count">${submissions.length}</span>
         </header>
@@ -803,21 +802,18 @@
       open: {
         label: "Open",
         sectionTitle: "Open submissions",
-        sectionHint: "Awaiting accept or reject.",
         emptyText: "No open submissions.",
         reviewHint: "Choose Accept or Reject when the decision is ready.",
       },
       accepted: {
         label: "Accepted",
         sectionTitle: "Accepted submissions",
-        sectionHint: "Moved forward after review.",
         emptyText: "No accepted submissions.",
         reviewHint: "This submission is marked accepted. The dashboard will show it under Accepted.",
       },
       rejected: {
         label: "Rejected",
         sectionTitle: "Rejected submissions",
-        sectionHint: "Not moving forward after review.",
         emptyText: "No rejected submissions.",
         reviewHint: "This submission is marked rejected. The dashboard will show it under Rejected.",
       },
